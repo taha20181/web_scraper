@@ -107,7 +107,10 @@ class ExtractionAction:
             "locations": data['contactsLocationsModule'],
             "investigators": data['sponsorCollaboratorsModule']['responsibleParty'],
         }
-        TrialVersion.objects.update_or_create(**version_data)
+        trial_version, created = TrialVersion.objects.update_or_create(**version_data)
+
+        if created and version_number > 0:
+            ExtractionAction.detect_changes(trial, trial_version)
         
         return True
 

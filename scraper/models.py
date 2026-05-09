@@ -23,9 +23,8 @@ class RawTrialData(models.Model):
     """
     trial = models.ForeignKey(Trial, on_delete=models.CASCADE, related_name='raw_responses')
     version_number = models.IntegerField()
-    version_date = models.DateField(null=True, blank=True) # Optional, but helpful for quick filtering
+    version_date = models.DateField(null=True, blank=True)
     
-    # THE CRITICAL DIFFERENCE: One field to rule them all.
     full_api_payload = models.JSONField(help_text="The complete, unmodified JSON dictionary returned by the API")
     
     fetched_at = models.DateTimeField(auto_now_add=True)
