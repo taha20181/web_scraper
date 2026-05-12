@@ -1,7 +1,7 @@
 import requests
 import logging
 
-from scraper.models import RawTrialData, Trial, TrialChangeSummary, TrialVersion
+from scraper.models import RawTrialData, Trial, TrialVersionPatch, TrialVersion
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +65,9 @@ class ExtractionAction:
         data = response.json()
 
         trial, _ = Trial.objects.get_or_create(nct_id=nct_id)
+        versions = data.get("history", {}).get("changes", [])
 
-        return data.get("history", {}).get("changes", [])
+        return versions
     
     @staticmethod
     def fetch_single_version(nct_id, version):
@@ -76,6 +77,7 @@ class ExtractionAction:
         url = f"https://clinicaltrials.gov/api/int/studies/{nct_id}/history/{version_number}"
 
         response = requests.request("GET", url, headers=ExtractionAction.HEADERS, data={})
+        logger.info(f"{url} returned with status code {response.status_code}")
         response.raise_for_status()
         
         full_json = response.json()
@@ -109,68 +111,60 @@ class ExtractionAction:
         }
         trial_version, created = TrialVersion.objects.update_or_create(**version_data)
 
-        if created and version_number > 0:
+        if version_number > 0:
             ExtractionAction.detect_changes(trial, trial_version)
         
         return True
 
     @staticmethod
     def detect_changes(trial, current_version):
-        previous_version = TrialVersion.objects.filter(
-            trial=trial,
-            version_number = current_version.version_number - 1
-        )
+        current_version_num = current_version.version_number
+        prev_version_num = current_version_num - 1
 
-        diff_payload = {}
-        flags = {
-            'status_changed': False,
-            'enrollment_updated': False,
-            'eligibility_modified': False,
-            'sites_changed': False,
-            'outcomes_changed': False
-        }
-
-        if current_version.recruitment_status != previous_version.recruitment_status:
-            flags['status_changed'] = True
-            diff_payload['status'] = {
-                'old': previous_version.recruitment_status, 
-                'new': current_version.recruitment_status
-            }
-
-        if current_version.enrollment != previous_version.enrollment:
-            flags['enrollment_updated'] = True
-            diff_payload['enrollment'] = {
-                'old': previous_version.enrollment, 
-                'new': current_version.enrollment
-            }
-
-        if len(current_version.locations) != len(previous_version.locations):
-            flags['sites_changed'] = True
-            diff_payload['locations_count'] = {
-                'old': len(previous_version.locations), 
-                'new': len(current_version.locations)
-            }
-
-        if current_version.eligibility_criteria != previous_version.eligibility_criteria:
-             flags['eligibility_modified'] = True
-            
-        if len(current_version.primary_outcome) > 0:
-            current_outcome = current_version.primary_outcome
-            previous_outcome = previous_version.primary_outcome
-            for i in range(len(current_version.primary_outcome)):
-                if current_outcome[i]['measure'] != previous_outcome[i]['measure']:
-                    diff_payload['primary_outcome'] = {
-                        'old': previous_outcome[i]['measure'],
-                        'new': current_outcome[i]['measure']
-                    }
-                    flags['outcomes_changed'] = True
-                    break
+        url = f"https://clinicaltrials.gov/api/int/studies/{trial.nct_id}/history/{prev_version_num}?patchToVersion={current_version_num}"
         
-        if any(flags.values()):
-            TrialChangeSummary.objects.create(
+        response = requests.request("GET", url, headers=ExtractionAction.HEADERS, data={})
+        logger.info(f"{url} returned with status code {response.status_code}")
+        response.raise_for_status()
+
+        data = response.json()
+        patches = data.get('patch', [])
+
+        prev_version = RawTrialData.objects.get(trial=trial, version_number=prev_version_num)
+        payload = prev_version.full_api_payload.get("study", {})
+
+        for patch in patches:
+
+            operation = patch.get("op")
+            path = patch.get("path")
+            change_value = patch.get("value")
+            value = payload
+            for key in path.split("/"):
+                if key == "":
+                    continue
+
+                if isinstance(value, list):
+                    continue
+
+                try:
+                    list_index = int(key)
+                    if isinstance(list_index, int):
+                        value = value[key]
+                        continue
+                except:
+                    pass
+                
+                value = value.get(key, {})
+
+            module_name = path.split("/")[2]
+
+            TrialVersionPatch.objects.create(
                 trial=trial,
-                from_version=previous_version,
-                to_version=current_version,
-                diff_payload=diff_payload,
-                **flags
+                from_version=prev_version_num,
+                to_version=current_version_num,
+                operation=operation,
+                module_name=module_name,
+                value=value,
+                change_value=change_value,
+                json_path=path
             )

@@ -6,8 +6,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 @shared_task(bind=True)
-def kickoff_extraction_pipeline(self, limit):
+def kickoff_extraction_pipeline(self, limit, nct_id=None):
     try:
+        if nct_id:
+            versions = ExtractionAction.fetch_trial_versions(nct_id)
+            if not versions:
+                raise
+
+            for version in versions:
+                fetch_single_trial_version.delay(nct_id, version)
+            
         if limit:
             nct_ids = ExtractionAction.fetch_trials(limit)
             for nct_id in nct_ids:

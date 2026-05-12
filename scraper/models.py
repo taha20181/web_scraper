@@ -62,30 +62,26 @@ class TrialVersion(models.Model):
         return f"{self.trial.nct_id} - v{self.version_number} ({self.version_date})"
 
 
-class TrialChangeSummary(models.Model):
+class TrialVersionPatch(models.Model):
     """
     Logs the specific, meaningful changes detected between two sequential versions.
-    Addresses the 'Change Detection Output' requirement.
     """
     trial = models.ForeignKey(Trial, on_delete=models.CASCADE, related_name='change_logs')
-    from_version = models.ForeignKey(TrialVersion, on_delete=models.CASCADE, related_name='changes_from')
-    to_version = models.ForeignKey(TrialVersion, on_delete=models.CASCADE, related_name='changes_to')
+    from_version = models.IntegerField()
+    to_version = models.IntegerField()
     
-    # Store the actual structural diff (e.g., {"enrollment": {"old": 100, "new": 150}})
-    diff_payload = models.JSONField(default=dict, help_text="Structured JSON representing the exact fields changed")
+    # Granular Extraction Data
+    module_name = models.CharField(max_length=100)
+    operation = models.CharField(max_length=20)
+    json_path = models.CharField(max_length=255)
     
-    # Human-readable summaries of the changes 
-    status_changed = models.BooleanField(default=False, help_text="Recruitment status changed [cite: 43]")
-    enrollment_updated = models.BooleanField(default=False, help_text="Enrollment updated [cite: 44]")
-    sites_changed = models.BooleanField(default=False, help_text="Trial site added and removed [cite: 45]")
-    eligibility_modified = models.BooleanField(default=False, help_text="Eligibility modified [cite: 46]")
-    outcomes_changed = models.BooleanField(default=False, help_text="Outcome measures changed [cite: 47]")
+    value = models.JSONField(null=True)
+    change_value = models.JSONField(null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        ordering = ['-to_version__version_date']
 
     def __str__(self):
-        return f"Changes for {self.trial.nct_id}: v{self.from_version.version_number} -> v{self.to_version.version_number}"
+        return f"Changes for {self.trial.nct_id}: v{self.from_version} -> v{self.to_version}"
     

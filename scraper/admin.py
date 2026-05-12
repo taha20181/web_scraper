@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
-from scraper.models import RawTrialData, Trial, TrialChangeSummary, TrialVersion
+from scraper.models import RawTrialData, Trial, TrialVersionPatch, TrialVersion
 
 # Register your models here.
 
@@ -12,9 +12,9 @@ class RawTrialDataAdmin(ImportExportModelAdmin):
 class TrialVersionAdmin(ImportExportModelAdmin):
     pass
 
-# @admin.register(RawTrialData)
-# class RawTrialDataAdmin(ImportExportModelAdmin):
-#     pass
+@admin.register(TrialVersionPatch)
+class TrialVersionPatchAdmin(ImportExportModelAdmin):
+    pass
+
 
 admin.site.register(Trial)
-admin.site.register(TrialChangeSummary)
